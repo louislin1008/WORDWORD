@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智慧中文錯別字與語意校對工具</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome 圖標 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts Inter & Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0284c7',
+              600: '#0369a1',
+              700: '#075985',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* 高亮標籤樣式 */
+    .hl-typo { background-color: #fecdd3; color: #9f1239; border-bottom: 2px solid #f43f5e; cursor: pointer; border-radius: 2px; padding: 0 2px; }
+    .hl-grammar { background-color: #fef08a; color: #854d0e; border-bottom: 2px solid #eab308; cursor: pointer; border-radius: 2px; padding: 0 2px; }
+    .hl-simplified { background-color: #fed7aa; color: #9a3412; border-bottom: 2px solid #f97316; cursor: pointer; border-radius: 2px; padding: 0 2px; }
+    .hl-punctuation { background-color: #e9d5ff; color: #6b21a8; border-bottom: 2px solid #a855f7; cursor: pointer; border-radius: 2px; padding: 0 2px; }
+    .hl-style { background-color: #bae6fd; color: #075985; border-bottom: 2px solid #0284c7; cursor: pointer; border-radius: 2px; padding: 0 2px; }
+
+    /* 平滑過渡與閃爍效果 */
+    .highlight-active { animation: pulse-ring 1.5s infinite; outline: 2px solid #0284c7; }
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.4); }
+      70% { box-shadow: 0 0 0 6px rgba(2, 132, 199, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen font-sans flex flex-col">
+
+  <!-- Header 導覽列 -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-brand-500 text-white rounded-lg shadow-md">
+          <i class="fa-solid fa-wand-magic-sparkles text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-slate-900 leading-tight">智慧中文錯字與語意校對工具</h1>
+          <p class="text-xs text-slate-500">基於語意邏輯與 AI 技術的繁體中文高階校對助手</p>
+        </div>
+      </div>
+      <!-- API 設定按鈕 -->
+      <div class="flex items-center space-x-2">
+        <button id="apiKeyBtn" onclick="toggleApiModal()" class="px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg flex items-center space-x-1.5 transition">
+          <i class="fa-solid fa-key text-amber-500"></i>
+          <span id="apiKeyStatus">設定 Gemini API Key</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主內容區塊 -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full">
+    
+    <!-- 頂部提示欄 -->
+    <div id="demoNotice" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <i class="fa-solid fa-circle-info text-blue-500 text-sm"></i>
+        <span>目前使用<b>預設字典模式</b>。若輸入自訂文字並需要 AI 深度分析，請點擊右上角設定您的 API Key（可留空使用基本分析與範例檔）。</span>
+      </div>
+      <button onclick="document.getElementById('demoNotice').remove()" class="text-blue-400 hover:text-blue-600"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- 雙欄布局 -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- 左欄：輸入區 -->
+      <div class="flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <!-- 輸入區標題與操作按鈕 -->
+        <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center space-x-2">
+            <span class="font-semibold text-slate-700 text-sm"><i class="fa-solid fa-pen-to-square text-brand-500 mr-1.5"></i>原始文字輸入</span>
+          </div>
+          <div class="flex items-center space-x-1.5 text-xs">
+            <button onclick="loadExample(1)" class="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-md transition shadow-2xs">範例一 (日常常錯)</button>
+            <button onclick="loadExample(2)" class="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-md transition shadow-2xs">範例二 (公文成語)</button>
+            <button onclick="pasteText()" class="px-2.5 py-1 text-slate-600 hover:text-brand-600 hover:bg-slate-100 rounded-md transition" title="貼上剪貼簿內容"><i class="fa-regular fa-clipboard mr-1"></i>貼上</button>
+            <button onclick="clearText()" class="px-2.5 py-1 text-slate-600 hover:text-rose-600 hover:bg-slate-100 rounded-md transition" title="清空所有內容"><i class="fa-regular fa-trash-can mr-1"></i>清空</button>
+          </div>
+        </div>
+
+        <!-- Textarea 輸入框 -->
+        <div class="relative flex-grow min-h-[360px]">
+          <textarea id="inputText" class="w-full h-full p-4 border-0 focus:ring-0 resize-none text-slate-800 text-base leading-relaxed placeholder-slate-400 outline-none" placeholder="請在此貼上或輸入您要檢查的繁體中文段落..."></textarea>
+        </div>
+
+        <!-- 底部資訊與執行校對按鈕 -->
+        <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+          <div class="text-xs text-slate-500">
+            字數：<span id="charCount" class="font-medium text-slate-700">0</span> 字
+          </div>
+          <button id="checkBtn" onclick="runCheck()" class="px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white font-medium text-sm rounded-xl shadow-md hover:shadow-lg transition flex items-center space-x-2">
+            <i class="fa-solid fa-magnifying-glass font-bold"></i>
+            <span>開始校對</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 右欄：分析與結果區 -->
+      <div class="flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <!-- 標題與分頁開關 -->
+        <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="font-semibold text-slate-700 text-sm"><i class="fa-solid fa-square-check text-emerald-500 mr-1.5"></i>校對分析結果</span>
+          </div>
+          <!-- 模式切換 Tabs -->
+          <div class="flex p-0.5 bg-slate-200 rounded-lg text-xs">
+            <button id="tabHighlight" onclick="switchView('highlight')" class="px-3 py-1 font-medium rounded-md bg-white text-slate-800 shadow-2xs">高亮比對</button>
+            <button id="tabDiff" onclick="switchView('diff')" class="px-3 py-1 font-medium rounded-md text-slate-600 hover:text-slate-900">差異對照</button>
+          </div>
+        </div>
+
+        <!-- 內容呈現區域 -->
+        <div class="p-4 flex-grow flex flex-col min-h-[360px]">
+          
+          <!-- Loading 載入動畫 -->
+          <div id="loadingView" class="hidden flex-grow flex flex-col items-center justify-center py-12 space-y-4">
+            <div class="relative w-12 h-12">
+              <div class="absolute top-0 left-0 w-full h-full border-4 border-brand-100 rounded-full"></div>
+              <div class="absolute top-0 left-0 w-full h-full border-4 border-brand-500 rounded-full border-t-transparent animate-spin"></div>
+            </div>
+            <p class="text-sm font-medium text-slate-600 animate-pulse">正在進行深度語意與錯別字檢測中...</p>
+          </div>
+
+          <!-- 初始空狀態 -->
+          <div id="emptyView" class="flex-grow flex flex-col items-center justify-center py-12 text-center text-slate-400">
+            <i class="fa-solid fa-file-circle-check text-5xl mb-3 text-slate-300"></i>
+            <p class="text-sm">在左側輸入文字並點擊「開始校對」</p>
+            <p class="text-xs text-slate-400 mt-1">系統將自動分析錯字、語意、成語及繁簡問題</p>
+          </div>
+
+          <!-- 結果展示視圖 -->
+          <div id="resultView" class="hidden flex-grow flex flex-col space-y-4">
+            
+            <!-- 統計概覽卡片 -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div class="p-2.5 bg-rose-50 border border-rose-100 rounded-xl">
+                <div class="text-xs text-rose-600 font-medium">錯別字</div>
+                <div id="countTypo" class="text-lg font-bold text-rose-700">0</div>
+              </div>
+              <div class="p-2.5 bg-amber-50 border border-amber-100 rounded-xl">
+                <div class="text-xs text-amber-600 font-medium">語法/成語</div>
+                <div id="countGrammar" class="text-lg font-bold text-amber-700">0</div>
+              </div>
+              <div class="p-2.5 bg-orange-50 border border-orange-100 rounded-xl">
+                <div class="text-xs text-orange-600 font-medium">繁簡/標點</div>
+                <div id="countPunct" class="text-lg font-bold text-orange-700">0</div>
+              </div>
+              <div class="p-2.5 bg-emerald-50 border border-emerald-100 rounded-xl">
+                <div class="text-xs text-emerald-600 font-medium">健康度評分</div>
+                <div id="scoreHealth" class="text-lg font-bold text-emerald-700">100%</div>
+              </div>
+            </div>
+
+            <!-- View 1: 標記高亮模式 -->
+            <div id="highlightContainer" class="p-4 bg-slate-50 rounded-xl border border-slate-200 text-base leading-relaxed break-words min-h-[120px]">
+              <!-- 高亮 HTML 會動態生成在此 -->
+            </div>
+
+            <!-- View 2: 對照 Diff 模式 (預設隱藏) -->
+            <div id="diffContainer" class="hidden p-4 bg-slate-50 rounded-xl border border-slate-200 text-base leading-relaxed break-words min-h-[120px] space-y-3">
+              <div>
+                <span class="text-xs font-semibold text-slate-400 block mb-1">修正後完整段落：</span>
+                <div id="correctedFullText" class="text-slate-800 bg-white p-3 rounded-lg border border-slate-200"></div>
+              </div>
+            </div>
+
+            <!-- 一鍵複製與工具列 -->
+            <div class="flex items-center justify-between pt-2">
+              <span class="text-xs text-slate-500"><i class="fa-solid fa-lightbulb text-amber-400 mr-1"></i>點擊下方卡片或高亮文字可相互對應</span>
+              <button onclick="copyCorrectedText()" class="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-900 text-white font-medium rounded-lg shadow-sm transition flex items-center space-x-1.5">
+                <i class="fa-regular fa-copy"></i>
+                <span>複製修正後文字</span>
+              </button>
+            </div>
+
+            <!-- 錯誤列表項列表 -->
+            <div class="pt-2">
+              <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">檢測出的修正建議項 (<span id="totalErrorsCount">0</span>)</h3>
+              <div id="errorCardsList" class="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                <!-- 動態卡片列表 -->
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- API Key 設定彈出視窗 Modal -->
+  <div id="apiModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-bold text-slate-800 flex items-center"><i class="fa-solid fa-key text-amber-500 mr-2"></i>設定 Google Gemini API Key</h3>
+        <button onclick="toggleApiModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+      <p class="text-xs text-slate-600 leading-relaxed">
+        本工具整合 <b>Gemini 2.5 Flash</b> 模型，輸入 API Key 後可針對任何複雜段落進行高度精確的中文錯別字、成語、句型與語意校對。
+      </p>
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Gemini API Key</label>
+        <input type="password" id="apiKeyInput" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="AIzaSy...">
+      </div>
+      <div class="flex justify-end space-x-2 pt-2">
+        <button onclick="saveApiKey()" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-medium rounded-lg transition">儲存設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 通知提示 -->
+  <div id="toast" class="fixed bottom-5 right-5 bg-slate-800 text-white text-xs px-4 py-2.5 rounded-xl shadow-lg transition opacity-0 pointer-events-none z-50 flex items-center space-x-2">
+    <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+    <span id="toastMsg">已複製到剪貼簿</span>
+  </div>
+
+  <script>
+    // 預設常見字典 (當無 API 金鑰時的離線比對庫)
+    const OFFLINE_DICTIONARY = [
+      { original: '因該', suggestion: '應該', type: '錯別字', explanation: '「因」為音近誤用，表應當之意應使用「應」。' },
+      { original: '在次', suggestion: '再次', type: '錯別字', explanation: '表示重複動作應使用副詞「再」。' },
+      { original: '裏面', suggestion: '裡面', type: '繁簡混用', explanation: '「裏」為簡體或異體慣用，臺灣繁體標準多採「裡」。' },
+      { original: '得', suggestion: '的', type: '錯別字', explanation: '修飾名詞或名詞性詞組時應使用結構助詞「的」。', contextRegex: /([一-龥]{1,3})得([名詞|人|東西|地方])/ },
+      { original: '穿流不息', suggestion: '川流不息', type: '成語誤用', explanation: '比喻時光或行人車馬像水流一樣連續不斷，應為「川」。' },
+      { original: '倒楣', suggestion: '倒黴', type: '錯別字', explanation: '運氣不好標準字寫作「倒黴」。' },
+      { original: '默不關心', suggestion: '漠不關心', type: '成語誤用', explanation: '形容冷淡不關心，應為「漠」。' },
+      { original: '記錄', suggestion: '紀錄', type: '語意不通', explanation: '動詞用「記錄」，名詞（如打破紀錄）建議用「紀錄」。' }
+    ];
+
+    // 內建範例資料
+    const EXAMPLES = {
+      1: "這篇文章因該重新審視一下，裡面包含了很多穿流不息的人群。如果你在次犯錯，老闆會非常生氣，這真是太倒楣了！我們得努力得完成這項工作。",
+      2: "對於這項公務提案，主管表示默不關心。為了防止再次出錯，我們裏面的人員必須建立完善記錄，創下歷史新紀錄。"
+    };
+
+    let currentAnalysis = null;
+    let activeView = 'highlight';
+
+    // 初始化頁面
+    window.onload = function() {
+      const savedKey = localStorage.getItem('GEMINI_API_KEY');
+      if (savedKey) {
+        document.getElementById('apiKeyInput').value = savedKey;
+        updateApiKeyStatus(true);
+      }
+      
+      const inputText = document.getElementById('inputText');
+      inputText.addEventListener('input', updateCharCount);
+      loadExample(1);
+    };
+
+    function updateCharCount() {
+      const text = document.getElementById('inputText').value;
+      document.getElementById('charCount').innerText = text.length;
+    }
+
+    function loadExample(num) {
+      const text = EXAMPLES[num] || EXAMPLES[1];
+      document.getElementById('inputText').value = text;
+      updateCharCount();
+    }
+
+    function clearText() {
+      document.getElementById('inputText').value = '';
+      updateCharCount();
+      resetResults();
+    }
+
+    async function pasteText() {
+      try {
+        const text = await navigator.clipboard.readText();
+        document.getElementById('inputText').value = text;
+        updateCharCount();
+      } catch (err) {
+        showToast('無法讀取剪貼簿，請手動貼上', 'fa-triangle-exclamation text-amber-400');
+      }
+    }
+
+    function toggleApiModal() {
+      const modal = document.getElementById('apiModal');
+      modal.classList.toggle('hidden');
+    }
+
+    function saveApiKey() {
+      const key = document.getElementById('apiKeyInput').value.trim();
+      if (key) {
+        localStorage.setItem('GEMINI_API_KEY', key);
+        updateApiKeyStatus(true);
+        showToast('API Key 儲存成功！');
+      } else {
+        localStorage.removeItem('GEMINI_API_KEY');
+        updateApiKeyStatus(false);
+        showToast('已清空 API Key');
+      }
+      toggleApiModal();
+    }
+
+    function updateApiKeyStatus(hasKey) {
+      const statusSpan = document.getElementById('apiKeyStatus');
+      if (hasKey) {
+        statusSpan.innerText = 'Gemini AI 已啟用';
+        statusSpan.classList.add('text-emerald-600', 'font-semibold');
+      } else {
+        statusSpan.innerText = '設定 Gemini API Key';
+        statusSpan.classList.remove('text-emerald-600', 'font-semibold');
+      }
+    }
+
+    function resetResults() {
+      document.getElementById('emptyView').classList.remove('hidden');
+      document.getElementById('resultView').classList.add('hidden');
+      document.getElementById('loadingView').classList.add('hidden');
+    }
+
+    // 核心處理邏輯：開始校對
+    async function runCheck() {
+      const text = document.getElementById('inputText').value.trim();
+      if (!text) {
+        showToast('請先輸入文字內容！', 'fa-triangle-exclamation text-amber-400');
+        return;
+      }
+
+      // UI 切換至 Loading 狀態
+      document.getElementById('emptyView').classList.add('hidden');
+      document.getElementById('resultView').classList.add('hidden');
+      document.getElementById('loadingView').classList.remove('hidden');
+
+      const apiKey = localStorage.getItem('GEMINI_API_KEY');
+
+      try {
+        if (apiKey) {
+          // 使用 Gemini API
+          currentAnalysis = await checkWithGeminiAPI(text, apiKey);
+        } else {
+          // 離線 / 預設規則比對
+          currentAnalysis = checkWithOfflineRules(text);
+        }
+
+        renderResults(text, currentAnalysis);
+      } catch (error) {
+        console.error('Check Error:', error);
+        // 若 API 失敗，退回離線規則
+        showToast('AI 校對失敗，已自動降級為離線字典模式', 'fa-triangle-exclamation text-amber-400');
+        currentAnalysis = checkWithOfflineRules(text);
+        renderResults(text, currentAnalysis);
+      } finally {
+        document.getElementById('loadingView').classList.add('hidden');
+        document.getElementById('resultView').classList.remove('hidden');
+      }
+    }
+
+    // 呼叫 Gemini 2.5 Flash API
+    async function checkWithGeminiAPI(text, apiKey) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+      const systemPrompt = `你是一位精通台灣繁體中文（正體中文）語法、成語、用詞規範的專家校對編輯。
+請檢查使用者輸入的文本，並輸出 JSON 格式的修正建議。
+檢查範疇包括：
+1. 錯別字（包含同音異字、形近字）
+2. 成語誤用
+3. 繁簡混用（將簡體字或簡體詞彙轉為臺灣繁體）
+4. 標點符號不符合臺灣標準
+5. 語意不通順或贅字
+
+請嚴格回傳符合以下 JSON 格式的數據，不要包含任何 markdown 標籤或其餘文字：
+{
+  "corrected_text": "完整的修正後文本",
+  "errors": [
+    {
+      "original": "原始錯字或錯詞",
+      "suggestion": "修正後的字詞",
+      "type": "分類名稱（請從以下選擇：錯別字、成語誤用、繁簡混用、標點符號、語意不通）",
+      "explanation": "簡短合理的修正理由說明（20字以內）"
+    }
+  ]
+}`;
+
+      const payload = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: `請校對以下文字：\n"${text}"` }]
+          }
+        ],
+        systemInstruction: {
+          parts: [{ text: systemPrompt }]
+        },
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      };
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Response Error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      return JSON.parse(rawText);
+    }
+
+    // 離線字典校對邏輯
+    function checkWithOfflineRules(text) {
+      const errors = [];
+      let correctedText = text;
+
+      OFFLINE_DICTIONARY.forEach(item => {
+        if (text.includes(item.original)) {
+          errors.push({
+            original: item.original,
+            suggestion: item.suggestion,
+            type: item.type,
+            explanation: item.explanation
+          });
+          correctedText = correctedText.replaceAll(item.original, item.suggestion);
+        }
+      });
+
+      return {
+        corrected_text: correctedText,
+        errors: errors
+      };
+    }
+
+    // 渲染校對結果
+    function renderResults(originalText, analysis) {
+      const errors = analysis.errors || [];
+      
+      // 更新計數
+      let countTypo = 0, countGrammar = 0, countPunct = 0;
+      errors.forEach(e => {
+        if (e.type === '錯別字') countTypo++;
+        else if (e.type === '成語誤用' || e.type === '語意不通') countGrammar++;
+        else countPunct++;
+      });
+
+      document.getElementById('countTypo').innerText = countTypo;
+      document.getElementById('countGrammar').innerText = countGrammar;
+      document.getElementById('countPunct').innerText = countPunct;
+      document.getElementById('totalErrorsCount').innerText = errors.length;
+
+      // 計算健康度評分
+      const healthScore = Math.max(0, 100 - (errors.length * 12));
+      document.getElementById('scoreHealth').innerText = `${healthScore}%`;
+
+      // 1. 生成高亮 HTML (原文 + 錯誤標籤)
+      let highlightedHTML = originalText;
+      // 根據長度降序排序，避免短詞替換干擾長詞
+      const sortedErrors = [...errors].sort((a, b) => b.original.length - a.original.length);
+
+      sortedErrors.forEach((err, idx) => {
+        const typeClass = getTypeClass(err.type);
+        const replacement = `<span id="hl-err-${idx}" onclick="focusErrorCard(${idx})" class="${typeClass}" title="${err.type}: ${err.original} ➔ ${err.suggestion}">${err.original}</span>`;
+        highlightedHTML = highlightedHTML.replaceAll(err.original, replacement);
+      });
+
+      document.getElementById('highlightContainer').innerHTML = highlightedHTML || '<span class="text-slate-400">（無內文）</span>';
+      
+      // 2. 差異對照
+      document.getElementById('correctedFullText').innerText = analysis.corrected_text;
+
+      // 3. 生成錯誤卡片列表
+      const cardsList = document.getElementById('errorCardsList');
+      cardsList.innerHTML = '';
+
+      if (errors.length === 0) {
+        cardsList.innerHTML = `
+          <div class="p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-center text-emerald-700 text-xs flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-circle-check text-emerald-500 text-sm"></i>
+            <span>完美無瑕！未檢測出明顯的錯別字或語法問題。</span>
+          </div>
+        `;
+      } else {
+        errors.forEach((err, idx) => {
+          const badgeClass = getTypeBadgeClass(err.type);
+          const card = document.createElement('div');
+          card.id = `error-card-${idx}`;
+          card.className = "p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs transition cursor-pointer flex flex-col space-y-1.5 shadow-2xs";
+          card.onclick = () => focusHighlightItem(idx);
+
+          card.innerHTML = `
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span class="font-bold text-rose-600 line-through">${escapeHtml(err.original)}</span>
+                <i class="fa-solid fa-arrow-right text-slate-400 text-[10px]"></i>
+                <span class="font-bold text-emerald-600">${escapeHtml(err.suggestion)}</span>
+              </div>
+              <span class="px-2 py-0.5 rounded-full font-medium ${badgeClass}">${escapeHtml(err.type)}</span>
+            </div>
+            <p class="text-slate-500 leading-normal">${escapeHtml(err.explanation)}</p>
+          `;
+          cardsList.appendChild(card);
+        });
+      }
+    }
+
+    function getTypeClass(type) {
+      switch (type) {
+        case '錯別字': return 'hl-typo';
+        case '成語誤用':
+        case '語意不通': return 'hl-grammar';
+        case '繁簡混用': return 'hl-simplified';
+        case '標點符號': return 'hl-punctuation';
+        default: return 'hl-style';
+      }
+    }
+
+    function getTypeBadgeClass(type) {
+      switch (type) {
+        case '錯別字': return 'bg-rose-100 text-rose-700';
+        case '成語誤用':
+        case '語意不通': return 'bg-amber-100 text-amber-700';
+        case '繁簡混用': return 'bg-orange-100 text-orange-700';
+        case '標點符號': return 'bg-purple-100 text-purple-700';
+        default: return 'bg-blue-100 text-blue-700';
+      }
+    }
+
+    // 互動：點擊卡片跳轉至高亮文字
+    function focusHighlightItem(idx) {
+      // 切換至高亮頁面
+      switchView('highlight');
+      
+      const el = document.getElementById(`hl-err-${idx}`);
+      if (el) {
+        // 移除其他高亮
+        document.querySelectorAll('.highlight-active').forEach(item => item.classList.remove('highlight-active'));
+        el.classList.add('highlight-active');
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    // 互動：點擊高亮文字聚焦至卡片
+    function focusErrorCard(idx) {
+      const card = document.getElementById(`error-card-${idx}`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        card.classList.add('ring-2', 'ring-brand-500');
+        setTimeout(() => card.classList.remove('ring-2', 'ring-brand-500'), 2000);
+      }
+    }
+
+    // 視圖切換 (高亮 vs 差異對照)
+    function switchView(view) {
+      activeView = view;
+      const hlBtn = document.getElementById('tabHighlight');
+      const diffBtn = document.getElementById('tabDiff');
+      const hlContainer = document.getElementById('highlightContainer');
+      const diffContainer = document.getElementById('diffContainer');
+
+      if (view === 'highlight') {
+        hlBtn.className = "px-3 py-1 font-medium rounded-md bg-white text-slate-800 shadow-2xs";
+        diffBtn.className = "px-3 py-1 font-medium rounded-md text-slate-600 hover:text-slate-900";
+        hlContainer.classList.remove('hidden');
+        diffContainer.classList.add('hidden');
+      } else {
+        diffBtn.className = "px-3 py-1 font-medium rounded-md bg-white text-slate-800 shadow-2xs";
+        hlBtn.className = "px-3 py-1 font-medium rounded-md text-slate-600 hover:text-slate-900";
+        diffContainer.classList.remove('hidden');
+        hlContainer.classList.add('hidden');
+      }
+    }
+
+    // 複製修正後的完整內容
+    function copyCorrectedText() {
+      if (!currentAnalysis || !currentAnalysis.corrected_text) {
+        showToast('尚無校對結果可供複製', 'fa-triangle-exclamation text-amber-400');
+        return;
+      }
+      
+      const textToCopy = currentAnalysis.corrected_text;
+      
+      // 相容性複製剪貼簿
+      const textarea = document.createElement('textarea');
+      textarea.value = textToCopy;
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast('已複製修正後的完整內容！');
+      } catch (err) {
+        showToast('複製失敗，請手動選取複製', 'fa-triangle-exclamation text-rose-400');
+      }
+      document.body.removeChild(textarea);
+    }
+
+    function showToast(msg, iconClass = 'fa-circle-check text-emerald-400') {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMsg').innerText = msg;
+      document.getElementById('toastIcon').className = `fa-solid ${iconClass}`;
+      toast.classList.remove('opacity-0', 'pointer-events-none');
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none');
+      }, 2500);
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
